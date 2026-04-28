@@ -1,0 +1,21 @@
+# Kustomization for monitoring stack exporters
+# Note: Prometheus and Loki are deployed via Helm charts, not included here
+# Use: kubectl apply -k .
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: monitoring
+
+resources:
+  # Exporters (apply after Helm charts are installed)
+  - pve-exporter.yaml
+  - pihole-exporter.yaml
+  - blackbox-exporter.yaml
+  - speedtest-exporter.yaml
+
+  # External Loki access
+  - loki-external.yaml
+
+commonLabels:
+  app.kubernetes.io/part-of: monitoring-stack
+  app.kubernetes.io/managed-by: kustomize

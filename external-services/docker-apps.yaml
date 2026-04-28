@@ -1,0 +1,523 @@
+---
+# External Services - Docker Apps (VM 100 - 10.0.60.11)
+# Purpose: Route traffic from k3s Traefik to Docker Traefik
+#
+# Architecture:
+#   Browser → k3s Traefik (10.0.60.31) → Docker Traefik (10.0.60.11:443) → Container
+#
+# k3s Traefik terminates TLS with Let's Encrypt certs, then forwards to
+# Docker Traefik via HTTPS. Docker Traefik routes based on Host header.
+#
+# After migration: Delete the external ingress, deploy k3s version
+#
+# DNS Requirement: *.local.example.home → 10.0.60.31 (k3s Traefik)
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: external
+  labels:
+    app.kubernetes.io/part-of: homelab
+---
+# Endpoints for Docker Traefik (10.0.60.11)
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: docker-traefik
+  namespace: external
+subsets:
+  - addresses:
+      - ip: 10.0.60.11
+    ports:
+      - name: https
+        port: 443
+        protocol: TCP
+---
+# Service pointing to Docker Traefik
+apiVersion: v1
+kind: Service
+metadata:
+  name: docker-traefik
+  namespace: external
+spec:
+  ports:
+    - name: https
+      port: 443
+      targetPort: 443
+  clusterIP: None
+---
+# n8n
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: n8n-external
+  namespace: external
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/service.serversscheme: https
+    cert-manager.io/cluster-issuer: letsencrypt-cloudflare
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - n8n.local.example.home
+      secretName: n8n-local-tls
+  rules:
+    - host: n8n.local.example.home
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: docker-traefik
+                port:
+                  number: 443
+---
+# Gitea
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gitea-external
+  namespace: external
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/service.serversscheme: https
+    cert-manager.io/cluster-issuer: letsencrypt-cloudflare
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - git.local.example.home
+      secretName: gitea-local-tls
+  rules:
+    - host: git.local.example.home
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: docker-traefik
+                port:
+                  number: 443
+---
+# Authentik
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: authentik-external
+  namespace: external
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/service.serversscheme: https
+    cert-manager.io/cluster-issuer: letsencrypt-cloudflare
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - auth.local.example.home
+      secretName: authentik-local-tls
+  rules:
+    - host: auth.local.example.home
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: docker-traefik
+                port:
+                  number: 443
+---
+# Grafana
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana-external
+  namespace: external
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/service.serversscheme: https
+    cert-manager.io/cluster-issuer: letsencrypt-cloudflare
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - grafana.local.example.home
+      secretName: grafana-local-tls
+  rules:
+    - host: grafana.local.example.home
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: docker-traefik
+                port:
+                  number: 443
+---
+# Prometheus
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: prometheus-external
+  namespace: external
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/service.serversscheme: https
+    cert-manager.io/cluster-issuer: letsencrypt-cloudflare
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - prometheus.local.example.home
+      secretName: prometheus-local-tls
+  rules:
+    - host: prometheus.local.example.home
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: docker-traefik
+                port:
+                  number: 443
+---
+# Wazuh
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: wazuh-external
+  namespace: external
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/service.serversscheme: https
+    cert-manager.io/cluster-issuer: letsencrypt-cloudflare
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - wazuh.local.example.home
+      secretName: wazuh-local-tls
+  rules:
+    - host: wazuh.local.example.home
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: docker-traefik
+                port:
+                  number: 443
+---
+# Nextcloud
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nextcloud-external
+  namespace: external
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/service.serversscheme: https
+    cert-manager.io/cluster-issuer: letsencrypt-cloudflare
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - nextcloud.local.example.home
+      secretName: nextcloud-local-tls
+  rules:
+    - host: nextcloud.local.example.home
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: docker-traefik
+                port:
+                  number: 443
+---
+# Firefly III
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: firefly-external
+  namespace: external
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/service.serversscheme: https
+    cert-manager.io/cluster-issuer: letsencrypt-cloudflare
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - firefly.local.example.home
+      secretName: firefly-local-tls
+  rules:
+    - host: firefly.local.example.home
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: docker-traefik
+                port:
+                  number: 443
+---
+# Portainer
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: portainer-external
+  namespace: external
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/service.serversscheme: https
+    cert-manager.io/cluster-issuer: letsencrypt-cloudflare
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - portainer.local.example.home
+      secretName: portainer-local-tls
+  rules:
+    - host: portainer.local.example.home
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: docker-traefik
+                port:
+                  number: 443
+---
+# Sonarr
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sonarr-external
+  namespace: external
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/service.serversscheme: https
+    cert-manager.io/cluster-issuer: letsencrypt-cloudflare
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - sonarr.local.example.home
+      secretName: sonarr-local-tls
+  rules:
+    - host: sonarr.local.example.home
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: docker-traefik
+                port:
+                  number: 443
+---
+# Radarr
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: radarr-external
+  namespace: external
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/service.serversscheme: https
+    cert-manager.io/cluster-issuer: letsencrypt-cloudflare
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - radarr.local.example.home
+      secretName: radarr-local-tls
+  rules:
+    - host: radarr.local.example.home
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: docker-traefik
+                port:
+                  number: 443
+---
+# Prowlarr
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: prowlarr-external
+  namespace: external
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/service.serversscheme: https
+    cert-manager.io/cluster-issuer: letsencrypt-cloudflare
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - prowlarr.local.example.home
+      secretName: prowlarr-local-tls
+  rules:
+    - host: prowlarr.local.example.home
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: docker-traefik
+                port:
+                  number: 443
+---
+# qBittorrent
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: qbittorrent-external
+  namespace: external
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/service.serversscheme: https
+    cert-manager.io/cluster-issuer: letsencrypt-cloudflare
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - qbit.local.example.home
+      secretName: qbit-local-tls
+  rules:
+    - host: qbit.local.example.home
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: docker-traefik
+                port:
+                  number: 443
+---
+# Notifiarr
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: notifiarr-external
+  namespace: external
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/service.serversscheme: https
+    cert-manager.io/cluster-issuer: letsencrypt-cloudflare
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - notifiarr.local.example.home
+      secretName: notifiarr-local-tls
+  rules:
+    - host: notifiarr.local.example.home
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: docker-traefik
+                port:
+                  number: 443
+---
+# Heimdall
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: heimdall-external
+  namespace: external
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/service.serversscheme: https
+    cert-manager.io/cluster-issuer: letsencrypt-cloudflare
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - heimdall.local.example.home
+      secretName: heimdall-local-tls
+  rules:
+    - host: heimdall.local.example.home
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: docker-traefik
+                port:
+                  number: 443
+---
+# Checkmate
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: checkmate-external
+  namespace: external
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/service.serversscheme: https
+    cert-manager.io/cluster-issuer: letsencrypt-cloudflare
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - checkmate.local.example.home
+      secretName: checkmate-local-tls
+  rules:
+    - host: checkmate.local.example.home
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: docker-traefik
+                port:
+                  number: 443
+---
+# Traefik Dashboard (Docker)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: traefik-docker-external
+  namespace: external
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/service.serversscheme: https
+    cert-manager.io/cluster-issuer: letsencrypt-cloudflare
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - traefik-docker.local.example.home
+      secretName: traefik-docker-local-tls
+  rules:
+    - host: traefik-docker.local.example.home
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: docker-traefik
+                port:
+                  number: 443

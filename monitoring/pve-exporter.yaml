@@ -1,0 +1,119 @@
+---
+# Proxmox VE Exporter for Prometheus
+# Scrapes metrics from Proxmox VE cluster API
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pve-exporter-credentials
+  namespace: monitoring
+type: Opaque
+stringData:
+  # REPLACE these values with actual credentials
+  # Consider using SOPS+age for encryption in production
+  pve.yml: |
+    default:
+      user: prometheus@pve
+      password: "CHANGE_ME"
+      verify_ssl: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pve-exporter
+  namespace: monitoring
+  labels:
+    app: pve-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pve-exporter
+  template:
+    metadata:
+      labels:
+        app: pve-exporter
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+      containers:
+        - name: pve-exporter
+          image: prompve/prometheus-pve-exporter:3.4.5
+          ports:
+            - containerPort: 9221
+              name: metrics
+              protocol: TCP
+          args:
+            - --config.file=/etc/pve-exporter/pve.yml
+          env:
+            - name: PVE_USER
+              value: "prometheus@pve"
+            # Target Proxmox node - Server B (or primary PVE node)
+            - name: PVE_TARGET
+              value: "10.0.60.21"
+          volumeMounts:
+            - name: config
+              mountPath: /etc/pve-exporter
+              readOnly: true
+          resources:
+            requests:
+              memory: 64Mi
+              cpu: 50m
+            limits:
+              memory: 128Mi
+              cpu: 200m
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 9221
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 9221
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: config
+          secret:
+            secretName: pve-exporter-credentials
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pve-exporter
+  namespace: monitoring
+  labels:
+    app: pve-exporter
+spec:
+  selector:
+    app: pve-exporter
+  ports:
+    - port: 9221
+      targetPort: 9221
+      name: metrics
+  type: ClusterIP
+---
+# ServiceMonitor for Prometheus Operator auto-discovery
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: pve-exporter
+  namespace: monitoring
+  labels:
+    app: pve-exporter
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: pve-exporter
+  endpoints:
+    - port: metrics
+      interval: 60s
+      path: /pve
+      params:
+        target: ["10.0.60.21"]
+        cluster: ["1"]
+        node: ["1"]

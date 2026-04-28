@@ -1,0 +1,8 @@
+[Unit]
+Description=Proxmox VM config backup
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/k3s-scripts/pve-config-backup.sh

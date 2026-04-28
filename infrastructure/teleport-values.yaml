@@ -1,0 +1,12 @@
+chartMode: standalone
+clusterName: teleport.home.example.home
+proxyListenerMode: multiplex
+persistence:
+  enabled: true
+  existingClaimName: teleport-cluster-longhorn
+service:
+  type: LoadBalancer
+ingress:
+  enabled: false
+tls:
+  existingSecretName: teleport-tls

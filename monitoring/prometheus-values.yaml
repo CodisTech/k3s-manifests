@@ -1,0 +1,287 @@
+# kube-prometheus-stack Helm values
+# Install: helm install prometheus prometheus-community/kube-prometheus-stack -n monitoring -f prometheus-values.yaml
+
+# Disable Grafana - already deployed separately
+grafana:
+  enabled: false
+
+# Prometheus configuration
+prometheus:
+  prometheusSpec:
+    # Storage configuration - NFS PVC
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: nfs-critical
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 50Gi
+
+    # Retention settings
+    retention: 15d
+    retentionSize: "45GB"
+
+    # Resource limits
+    resources:
+      requests:
+        memory: 1Gi
+        cpu: 500m
+      limits:
+        memory: 4Gi
+        cpu: 2000m
+
+    # Scrape interval defaults
+    scrapeInterval: 30s
+    evaluationInterval: 30s
+
+    # Mount Vault CA certificate for TLS scrape targets
+    volumes:
+      - name: vault-ca
+        configMap:
+          name: vault-ca-cert
+    volumeMounts:
+      - name: vault-ca
+        mountPath: /etc/prometheus/vault-ca
+        readOnly: true
+
+    # Additional scrape configs for external targets
+    additionalScrapeConfigs:
+      # Pi-hole exporter (deployed in k3s)
+      - job_name: 'pihole'
+        static_configs:
+          - targets: ['pihole-exporter.monitoring.svc.cluster.local:9617']
+        metrics_path: /metrics
+
+      # Proxmox VE exporter (deployed in k3s)
+      - job_name: 'proxmox'
+        static_configs:
+          - targets: ['pve-exporter.monitoring.svc.cluster.local:9221']
+        metrics_path: /pve
+
+      # OPNsense (node_exporter with TLS) — single node, HA rolled back
+      - job_name: 'opnsense'
+        scheme: https
+        tls_config:
+          ca_file: /etc/prometheus/vault-ca/ca.crt
+        static_configs:
+          - targets: ['10.0.60.1:9100']
+        relabel_configs:
+          - source_labels: [__address__]
+            target_label: instance
+            replacement: opnsense-primary
+
+      # TrueNAS SCALE (Server B) — enable after Phase 1 deployment
+      # - job_name: 'truenas'
+      #   static_configs:
+      #     - targets: ['10.0.60.15:9100']
+      #   relabel_configs:
+      #     - source_labels: [__address__]
+      #       target_label: instance
+      #       replacement: truenas-server-b
+
+      # Blackbox exporter - HTTP probes
+      - job_name: 'blackbox-http'
+        metrics_path: /probe
+        params:
+          module: [http_2xx_ssl]
+        static_configs:
+          - targets:
+              - https://grafana.home.example.home
+              - https://prometheus.home.example.home
+              - https://alertmanager.home.example.home
+              - https://loki.home.example.home
+        relabel_configs:
+          - source_labels: [__address__]
+            target_label: __param_target
+          - source_labels: [__param_target]
+            target_label: instance
+          - target_label: __address__
+            replacement: blackbox-exporter.monitoring.svc.cluster.local:9115
+
+      # Blackbox exporter - TCP/TLS probes
+      - job_name: 'blackbox-tcp-tls'
+        metrics_path: /probe
+        params:
+          module: [tcp_connect_tls]
+        static_configs:
+          - targets:
+              - 10.0.60.1:22    # OPNsense SSH
+        relabel_configs:
+          - source_labels: [__address__]
+            target_label: __param_target
+          - source_labels: [__param_target]
+            target_label: instance
+          - target_label: __address__
+            replacement: blackbox-exporter.monitoring.svc.cluster.local:9115
+
+      # SMART disk health (smartctl_exporter on Proxmox hosts)
+      - job_name: 'smartctl'
+        scrape_interval: 60s
+        static_configs:
+          - targets: ['10.0.60.10:9633']
+            labels:
+              instance: pve-server-a
+          - targets: ['10.0.60.9:9633']
+            labels:
+              instance: nas
+          - targets: ['10.0.60.8:9633']
+            labels:
+              instance: pve-server-d
+
+      # Speedtest exporter (in-cluster, Linkerd mTLS)
+      - job_name: 'speedtest'
+        scrape_interval: 1h
+        scrape_timeout: 120s
+        static_configs:
+          - targets: ['speedtest-exporter.monitoring.svc.cluster.local:9798']
+        metrics_path: /metrics
+
+      # External nodes with TLS-enabled node_exporter
+      - job_name: 'external-nodes'
+        scheme: https
+        tls_config:
+          ca_file: /etc/prometheus/vault-ca/ca.crt
+        static_configs:
+          - targets:
+              - 10.0.60.11:9100  # VM 100 - Docker host
+              - 10.0.70.10:9100  # VM 111 - Gitea/n8n
+        relabel_configs:
+          - source_labels: [__address__]
+            regex: '10.0.60.11:.*'
+            target_label: instance
+            replacement: vm100-docker
+          - source_labels: [__address__]
+            regex: '10.0.70.10:.*'
+            target_label: instance
+            replacement: vm111-gitea
+
+  # Ingress for Prometheus UI
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    annotations:
+      cert-manager.io/cluster-issuer: "letsencrypt-cloudflare"
+    hosts:
+      - prometheus.home.example.home
+    paths:
+      - /
+    tls:
+      - secretName: prometheus-tls
+        hosts:
+          - prometheus.home.example.home
+
+# Alertmanager configuration
+alertmanager:
+  alertmanagerSpec:
+    # Storage configuration - NFS PVC
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: nfs-critical
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 5Gi
+
+    # Resource limits
+    resources:
+      requests:
+        memory: 128Mi
+        cpu: 50m
+      limits:
+        memory: 256Mi
+        cpu: 200m
+
+  # Ingress for Alertmanager UI
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    annotations:
+      cert-manager.io/cluster-issuer: "letsencrypt-cloudflare"
+    hosts:
+      - alertmanager.home.example.home
+    paths:
+      - /
+    tls:
+      - secretName: alertmanager-tls
+        hosts:
+          - alertmanager.home.example.home
+
+  # Alertmanager config (customize as needed)
+  config:
+    global:
+      resolve_timeout: 5m
+    route:
+      group_by: ['alertname', 'job']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+      receiver: 'default'
+      routes:
+        - match:
+            severity: critical
+          receiver: 'critical'
+    receivers:
+      - name: 'default'
+        # Add notification configs (email, slack, etc.) as needed
+      - name: 'critical'
+        # Add notification configs for critical alerts
+
+# Node exporter - DaemonSet on all nodes
+nodeExporter:
+  enabled: true
+  resources:
+    requests:
+      memory: 64Mi
+      cpu: 50m
+    limits:
+      memory: 128Mi
+      cpu: 200m
+
+# kube-state-metrics
+kubeStateMetrics:
+  enabled: true
+
+# Prometheus Operator
+prometheusOperator:
+  enabled: true
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 100m
+    limits:
+      memory: 256Mi
+      cpu: 500m
+
+# Default rules
+defaultRules:
+  create: true
+  rules:
+    alertmanager: true
+    etcd: false  # k3s uses embedded etcd differently
+    configReloaders: true
+    general: true
+    k8s: true
+    kubeApiserverAvailability: true
+    kubeApiserverBurnrate: true
+    kubeApiserverHistogram: true
+    kubeApiserverSlos: true
+    kubeControllerManager: false  # k3s specific
+    kubelet: true
+    kubeProxy: false  # k3s specific
+    kubePrometheusGeneral: true
+    kubePrometheusNodeRecording: true
+    kubernetesApps: true
+    kubernetesResources: true
+    kubernetesStorage: true
+    kubernetesSystem: true
+    kubeSchedulerAlerting: false  # k3s specific
+    kubeSchedulerRecording: false  # k3s specific
+    kubeStateMetrics: true
+    network: true
+    node: true
+    nodeExporterAlerting: true
+    nodeExporterRecording: true
+    prometheus: true
+    prometheusOperator: true

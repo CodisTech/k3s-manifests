@@ -1,0 +1,108 @@
+---
+# Pi-hole Exporter for Prometheus
+# Scrapes metrics from Pi-hole DNS server API
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pihole-exporter-credentials
+  namespace: monitoring
+type: Opaque
+stringData:
+  # REPLACE with actual Pi-hole API token
+  # Found in Pi-hole Admin > Settings > API
+  PIHOLE_API_TOKEN: "REPLACE_WITH_PIHOLE_API_TOKEN"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pihole-exporter
+  namespace: monitoring
+  labels:
+    app: pihole-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pihole-exporter
+  template:
+    metadata:
+      labels:
+        app: pihole-exporter
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+      containers:
+        - name: pihole-exporter
+          image: ekofr/pihole-exporter:v0.4.0
+          ports:
+            - containerPort: 9617
+              name: metrics
+              protocol: TCP
+          env:
+            - name: PIHOLE_HOSTNAME
+              value: "10.0.60.55"
+            - name: PIHOLE_PORT
+              value: "80"
+            - name: PIHOLE_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: pihole-exporter-credentials
+                  key: PIHOLE_API_TOKEN
+            - name: PORT
+              value: "9617"
+          resources:
+            requests:
+              memory: 32Mi
+              cpu: 25m
+            limits:
+              memory: 64Mi
+              cpu: 100m
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: 9617
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: 9617
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pihole-exporter
+  namespace: monitoring
+  labels:
+    app: pihole-exporter
+spec:
+  selector:
+    matchLabels:
+      app: pihole-exporter
+  ports:
+    - port: 9617
+      targetPort: 9617
+      name: metrics
+  type: ClusterIP
+---
+# ServiceMonitor for Prometheus Operator auto-discovery
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: pihole-exporter
+  namespace: monitoring
+  labels:
+    app: pihole-exporter
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: pihole-exporter
+  endpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics

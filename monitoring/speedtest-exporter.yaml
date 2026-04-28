@@ -1,0 +1,80 @@
+---
+# Speedtest Exporter for Prometheus
+# Measures ISP bandwidth using Ookla Speedtest CLI
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: speedtest-exporter
+  namespace: monitoring
+  labels:
+    app: speedtest-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: speedtest-exporter
+  template:
+    metadata:
+      labels:
+        app: speedtest-exporter
+    spec:
+      containers:
+        - name: speedtest-exporter
+          image: miguelndecarvalho/speedtest-exporter:v3.5.4
+          ports:
+            - containerPort: 9798
+              name: metrics
+              protocol: TCP
+          env:
+            # Set to your preferred Speedtest server ID (optional)
+            # Find server IDs: speedtest --list
+            # - name: SPEEDTEST_SERVER
+            #   value: "12345"
+            - name: SPEEDTEST_PORT
+              value: "9798"
+          resources:
+            requests:
+              memory: 64Mi
+              cpu: 50m
+            limits:
+              memory: 256Mi
+              cpu: 500m
+          # No liveness/readiness probes - speedtest takes ~60s to complete
+          # and the exporter only runs tests on scrape
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: speedtest-exporter
+  namespace: monitoring
+  labels:
+    app: speedtest-exporter
+spec:
+  selector:
+    matchLabels:
+      app: speedtest-exporter
+  ports:
+    - port: 9798
+      targetPort: 9798
+      name: metrics
+  type: ClusterIP
+---
+# ServiceMonitor for Prometheus Operator auto-discovery
+# Note: Long scrape interval (1h) and timeout (120s) due to test duration
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: speedtest-exporter
+  namespace: monitoring
+  labels:
+    app: speedtest-exporter
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: speedtest-exporter
+  endpoints:
+    - port: metrics
+      interval: 1h
+      scrapeTimeout: 120s
+      path: /metrics

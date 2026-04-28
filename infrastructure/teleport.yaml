@@ -1,0 +1,50 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: teleport
+---
+# Teleport is deployed via Helm chart: teleport-cluster
+# Helm install command:
+#   helm repo add teleport https://charts.releases.teleport.dev
+#   helm repo update
+#   helm install teleport-cluster teleport/teleport-cluster \
+#     --namespace teleport \
+#     --values teleport-values.yaml
+#
+# Node enrollment: install teleport agent on each node and configure
+# /etc/teleport.yaml with join_params. See teleport-node-setup.sh.
+#
+# Requires --insecure systemd override on all agent nodes due to
+# self-signed TLS certs. Do NOT remove until proper certs are configured.
+---
+# Helm values for reference (applied via teleport-values.yaml):
+#
+# chartMode: standalone
+# clusterName: teleport.home.example.home
+# proxyListenerMode: multiplex
+# persistence:
+#   enabled: true
+#   storageClassName: nfs-critical
+#   volumeSize: 10Gi
+# service:
+#   type: LoadBalancer
+# ingress:
+#   enabled: false
+---
+# MetalLB will assign 10.0.60.32 to the LoadBalancer service.
+# DNS: host-record=teleport.home.example.home,10.0.60.32
+#      configured in Pi-hole /etc/dnsmasq.d/03-k3s.conf
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: teleport-tls
+  namespace: teleport
+spec:
+  secretName: teleport-tls
+  issuerRef:
+    name: letsencrypt-cloudflare
+    kind: ClusterIssuer
+  dnsNames:
+    - teleport.home.example.home

@@ -1,0 +1,273 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tdarr
+---
+# Tdarr Server - manages the queue and web UI
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tdarr-server
+  namespace: tdarr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tdarr-server
+  template:
+    metadata:
+      labels:
+        app: tdarr-server
+    spec:
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      nodeSelector:
+        kubernetes.io/hostname: k3s-control
+      containers:
+      - name: tdarr
+        image: ghcr.io/haveagitgat/tdarr:latest
+        ports:
+        - containerPort: 8265
+          name: webui
+        - containerPort: 8266
+          name: server
+        env:
+        - name: TZ
+          value: "America/New_York"
+        - name: PUID
+          value: "1000"
+        - name: PGID
+          value: "1000"
+        - name: serverIP
+          value: "0.0.0.0"
+        - name: serverPort
+          value: "8266"
+        - name: webUIPort
+          value: "8265"
+        - name: internalNode
+          value: "false"
+        - name: inContainer
+          value: "true"
+        - name: ffmpegVersion
+          value: "6"
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "1"
+        volumeMounts:
+        - name: server-config
+          mountPath: /app/server
+        - name: server-logs
+          mountPath: /app/logs
+        - name: media
+          mountPath: /media
+      volumes:
+      - name: server-config
+        hostPath:
+          path: /opt/k3s-local/tdarr/server
+          type: DirectoryOrCreate
+      - name: server-logs
+        hostPath:
+          path: /opt/k3s-local/tdarr/logs
+          type: DirectoryOrCreate
+      - name: media
+        nfs:
+          server: 10.0.60.9
+          path: /storage/media
+---
+# Tdarr Workers - run on all worker nodes
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: tdarr-worker
+  namespace: tdarr
+spec:
+  selector:
+    matchLabels:
+      app: tdarr-worker
+  template:
+    metadata:
+      labels:
+        app: tdarr-worker
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: node-role.kubernetes.io/control-plane
+                operator: DoesNotExist
+              - key: kubernetes.io/hostname
+                operator: NotIn
+                values:
+                - k3s-worker-1
+      containers:
+      - name: tdarr-node
+        image: ghcr.io/haveagitgat/tdarr_node:latest
+        env:
+        - name: TZ
+          value: "America/New_York"
+        - name: PUID
+          value: "1000"
+        - name: PGID
+          value: "1000"
+        - name: serverIP
+          value: "tdarr-server.tdarr.svc.cluster.local"
+        - name: serverPort
+          value: "8266"
+        - name: inContainer
+          value: "true"
+        - name: ffmpegVersion
+          value: "6"
+        - name: nodeName
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "2"
+        volumeMounts:
+        - name: node-config
+          mountPath: /app/configs
+        - name: logs
+          mountPath: /app/logs
+        - name: transcode-cache
+          mountPath: /temp
+        - name: media
+          mountPath: /media
+      volumes:
+      - name: node-config
+        hostPath:
+          path: /opt/k3s-local/tdarr/configs
+          type: DirectoryOrCreate
+      - name: logs
+        hostPath:
+          path: /opt/k3s-local/tdarr/logs
+          type: DirectoryOrCreate
+      - name: transcode-cache
+        nfs:
+          server: 10.0.60.9
+          path: /storage/k3s/tdarr-temp
+      - name: media
+        nfs:
+          server: 10.0.60.9
+          path: /storage/media
+---
+# Tdarr GPU Worker - runs on worker-1 (GTX 1660, shared with Plex)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tdarr-worker-gpu
+  namespace: tdarr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tdarr-worker-gpu
+  template:
+    metadata:
+      labels:
+        app: tdarr-worker-gpu
+    spec:
+      runtimeClassName: nvidia
+      nodeSelector:
+        kubernetes.io/hostname: k3s-worker-1
+      containers:
+      - name: tdarr-node
+        image: ghcr.io/haveagitgat/tdarr_node:latest
+        env:
+        - name: TZ
+          value: "America/New_York"
+        - name: PUID
+          value: "1000"
+        - name: PGID
+          value: "1000"
+        - name: serverIP
+          value: "tdarr-server.tdarr.svc.cluster.local"
+        - name: serverPort
+          value: "8266"
+        - name: inContainer
+          value: "true"
+        - name: ffmpegVersion
+          value: "6"
+        - name: nodeName
+          value: "k3s-worker-1-gpu"
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: "all"
+        - name: NVIDIA_DRIVER_CAPABILITIES
+          value: "all"
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1"
+        volumeMounts:
+        - name: node-config
+          mountPath: /app/configs
+        - name: logs
+          mountPath: /app/logs
+        - name: transcode-cache
+          mountPath: /temp
+        - name: media
+          mountPath: /media
+      volumes:
+      - name: node-config
+        hostPath:
+          path: /opt/k3s-local/tdarr/configs-gpu
+          type: DirectoryOrCreate
+      - name: logs
+        hostPath:
+          path: /opt/k3s-local/tdarr/logs
+          type: DirectoryOrCreate
+      - name: transcode-cache
+        nfs:
+          server: 10.0.60.9
+          path: /storage/k3s/tdarr-temp
+      - name: media
+        nfs:
+          server: 10.0.60.9
+          path: /storage/media
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tdarr-server
+  namespace: tdarr
+spec:
+  selector:
+    app: tdarr-server
+  ports:
+  - name: webui
+    port: 80
+    targetPort: 8265
+  - name: server
+    port: 8266
+    targetPort: 8266
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: tdarr-ingress
+  namespace: tdarr
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-cloudflare"
+spec:
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - tdarr.home.example.home
+    secretName: tdarr-tls
+  rules:
+  - host: tdarr.home.example.home
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: tdarr-server
+            port:
+              number: 80

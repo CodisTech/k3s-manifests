@@ -1,0 +1,52 @@
+---
+# TLS Ingress for Loki Push API
+# Replaces the plain HTTP LoadBalancer for external Promtail instances
+# External Promtail clients push logs over HTTPS
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: loki-push-ingress
+  namespace: monitoring
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-cloudflare"
+    # Increase body size for log payloads
+    traefik.ingress.kubernetes.io/buffering: |
+      maxRequestBodyBytes: 52428800
+    # Pass client IP for logging
+    traefik.ingress.kubernetes.io/pass-client-tls-cert: "true"
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - loki.home.example.home
+      secretName: loki-push-tls
+  rules:
+    - host: loki.home.example.home
+      http:
+        paths:
+          # Loki push API endpoint
+          - path: /loki/api/v1/push
+            pathType: Exact
+            backend:
+              service:
+                name: loki
+                port:
+                  number: 3100
+          # Ready endpoint for health checks
+          - path: /ready
+            pathType: Exact
+            backend:
+              service:
+                name: loki
+                port:
+                  number: 3100
+---
+# Internal LoadBalancer can be removed once external Promtail uses HTTPS
+# Keep this commented out - delete loki-external.yaml instead
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: loki-external
+#   namespace: monitoring
+# spec:
+#   # Mark for deletion

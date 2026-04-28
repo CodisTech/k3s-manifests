@@ -1,0 +1,284 @@
+---
+# External Services - Infrastructure
+# Purpose: Route traffic from k3s Traefik to infrastructure services
+# These are not Docker containers - they're VMs and physical devices
+---
+# Home Assistant (VM 113 - 10.0.60.100)
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: homeassistant
+  namespace: external
+subsets:
+  - addresses:
+      - ip: 10.0.60.100
+    ports:
+      - name: http
+        port: 8123
+        protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: homeassistant
+  namespace: external
+spec:
+  ports:
+    - name: http
+      port: 8123
+      targetPort: 8123
+  clusterIP: None
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: homeassistant-external
+  namespace: external
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - ha.local.example.home
+      secretName: ha-local-tls
+  rules:
+    - host: ha.local.example.home
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: homeassistant
+                port:
+                  number: 8123
+---
+# OPNsense (10.0.99.1)
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: opnsense
+  namespace: external
+subsets:
+  - addresses:
+      - ip: 10.0.99.1
+    ports:
+      - name: https
+        port: 443
+        protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: opnsense
+  namespace: external
+spec:
+  ports:
+    - name: https
+      port: 443
+      targetPort: 443
+  clusterIP: None
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: opnsense-external
+  namespace: external
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - opnsense.local.example.home
+      secretName: opnsense-local-tls
+  rules:
+    - host: opnsense.local.example.home
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: opnsense
+                port:
+                  number: 443
+---
+# Proxmox Server C (10.0.60.9)
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: proxmox-c
+  namespace: external
+subsets:
+  - addresses:
+      - ip: 10.0.60.9
+    ports:
+      - name: https
+        port: 8006
+        protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: proxmox-c
+  namespace: external
+spec:
+  ports:
+    - name: https
+      port: 8006
+      targetPort: 8006
+  clusterIP: None
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: proxmox-external
+  namespace: external
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - proxmox.local.example.home
+      secretName: proxmox-local-tls
+  rules:
+    - host: proxmox.local.example.home
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: proxmox-c
+                port:
+                  number: 8006
+---
+# Pi-hole (10.0.60.55)
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: pihole
+  namespace: external
+subsets:
+  - addresses:
+      - ip: 10.0.60.55
+    ports:
+      - name: http
+        port: 80
+        protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pihole
+  namespace: external
+spec:
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+  clusterIP: None
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pihole1-external
+  namespace: external
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - pihole1.local.example.home
+      secretName: pihole1-local-tls
+  rules:
+    - host: pihole1.local.example.home
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: pihole
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pihole2-external
+  namespace: external
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - pihole2.local.example.home
+      secretName: pihole2-local-tls
+  rules:
+    - host: pihole2.local.example.home
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: pihole
+                port:
+                  number: 80
+---
+# UniFi Controller (VM 107 - 10.0.40.100)
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: unifi
+  namespace: external
+subsets:
+  - addresses:
+      - ip: 10.0.40.100
+    ports:
+      - name: https
+        port: 443
+        protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: unifi
+  namespace: external
+spec:
+  ports:
+    - name: https
+      port: 443
+      targetPort: 443
+  clusterIP: None
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: unifi-external
+  namespace: external
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - unifi.local.example.home
+      secretName: unifi-local-tls
+  rules:
+    - host: unifi.local.example.home
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: unifi
+                port:
+                  number: 443
