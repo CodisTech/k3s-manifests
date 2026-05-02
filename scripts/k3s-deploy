@@ -1,0 +1,168 @@
+#!/bin/bash
+# =============================================================================
+# k3s Manifest Deploy Script
+# =============================================================================
+# Location on k3s-control: /usr/local/bin/k3s-deploy
+#
+# Usage: k3s-deploy [category] [--dry-run]
+#
+# Pulls latest manifests from Gitea and applies changes.
+# Detects which files changed and only applies those.
+#
+# Categories:
+#   all            - Apply all changed manifests (default)
+#   apps           - Only app manifests
+#   infrastructure - Only infrastructure manifests
+#   monitoring     - Only monitoring manifests
+#   external       - Only external service manifests
+#
+# Options:
+#   --dry-run      - Show what would change without applying
+#   --force        - Apply all manifests, not just changed ones
+# =============================================================================
+
+set -e
+
+CATEGORY="all"
+DRY_RUN=false
+FORCE=false
+REPO_DIR="/opt/k3s-manifests"
+REPO_URL="https://git.local.codistech.live/john/k3s-manifests.git"
+
+# Parse args — flags vs category
+for arg in "$@"; do
+    case "$arg" in
+        --dry-run) DRY_RUN=true ;;
+        --force) FORCE=true ;;
+        -*) echo "Unknown option: $arg"; exit 1 ;;
+        *) CATEGORY="$arg" ;;
+    esac
+done
+
+echo "=== k3s Manifest Deploy ==="
+echo "Time: $(date)"
+echo "Category: $CATEGORY"
+[ "$DRY_RUN" = true ] && echo "Mode: DRY RUN (no changes will be applied)"
+echo ""
+
+# Clone repo if first run
+if [ ! -d "$REPO_DIR/.git" ]; then
+    echo "Repo not found. Cloning..."
+    sudo git clone "$REPO_URL" "$REPO_DIR"
+    sudo chown -R john:john "$REPO_DIR"
+    FORCE=true  # First run — apply everything
+fi
+
+cd "$REPO_DIR"
+
+echo "Fetching latest..."
+git fetch origin main
+
+# Check for changes
+CHANGES=$(git diff HEAD..origin/main --stat 2>/dev/null || echo "")
+if [ -z "$CHANGES" ] && [ "$FORCE" != true ]; then
+    echo "Already up to date: $(git log -1 --oneline)"
+    exit 0
+fi
+
+if [ -n "$CHANGES" ]; then
+    echo "Changes to deploy:"
+    echo "$CHANGES"
+    echo ""
+fi
+
+# Get list of changed files before pulling
+CHANGED_FILES=$(git diff HEAD..origin/main --name-only 2>/dev/null || echo "")
+
+echo "Pulling changes..."
+git pull origin main
+
+# Determine which directories to apply
+DIRS=()
+case "$CATEGORY" in
+    all)
+        DIRS=("infrastructure" "apps" "external-services" "monitoring")
+        ;;
+    apps)
+        DIRS=("apps")
+        ;;
+    infrastructure|infra)
+        DIRS=("infrastructure")
+        ;;
+    monitoring|mon)
+        DIRS=("monitoring")
+        ;;
+    external|ext)
+        DIRS=("external-services")
+        ;;
+    *)
+        echo "Unknown category: $CATEGORY"
+        echo "Usage: k3s-deploy [all|apps|infrastructure|monitoring|external] [--dry-run] [--force]"
+        exit 1
+        ;;
+esac
+
+APPLIED=0
+SKIPPED=0
+ERRORS=0
+
+for dir in "${DIRS[@]}"; do
+    [ ! -d "$REPO_DIR/$dir" ] && continue
+
+    for manifest in "$REPO_DIR/$dir"/*.yaml; do
+        [ ! -f "$manifest" ] && continue
+        filename=$(basename "$manifest")
+        relpath="$dir/$filename"
+
+        # Skip Helm values files and Kustomize directives — not k8s manifests
+        case "$filename" in
+            *-values.yaml|kustomization.yaml)
+                SKIPPED=$((SKIPPED + 1))
+                continue
+                ;;
+        esac
+
+        # Skip non-changed files unless --force
+        if [ "$FORCE" != true ] && [ -n "$CHANGED_FILES" ]; then
+            if ! echo "$CHANGED_FILES" | grep -q "$relpath"; then
+                SKIPPED=$((SKIPPED + 1))
+                continue
+            fi
+        fi
+
+        echo -n "  Applying $relpath... "
+
+        if [ "$DRY_RUN" = true ]; then
+            kubectl apply -f "$manifest" --dry-run=client 2>&1 | tail -1
+        else
+            if kubectl apply -f "$manifest" 2>&1; then
+                APPLIED=$((APPLIED + 1))
+            else
+                echo "FAILED"
+                ERRORS=$((ERRORS + 1))
+            fi
+        fi
+    done
+done
+
+echo ""
+echo "Deployed version:"
+git log -1 --oneline
+echo ""
+echo "=== Deploy Summary ==="
+echo "  Applied: $APPLIED"
+echo "  Skipped (unchanged): $SKIPPED"
+[ "$ERRORS" -gt 0 ] && echo "  ERRORS: $ERRORS"
+echo ""
+
+# Post-deploy checks
+if [ "$DRY_RUN" != true ] && [ "$APPLIED" -gt 0 ]; then
+    echo "--- Pod Status ---"
+    kubectl get pods -A --field-selector=status.phase!=Running,status.phase!=Succeeded 2>/dev/null | grep -v "^$" || echo "All pods healthy."
+    echo ""
+    echo "--- PVC Status ---"
+    kubectl get pvc -A 2>/dev/null | head -20
+fi
+
+echo ""
+echo "=== Deploy Complete ==="

@@ -1,0 +1,67 @@
+---
+# LoadBalancer Service for Loki
+# Exposes Loki to external Promtail instances (Pi-hole, VM 111)
+apiVersion: v1
+kind: Service
+metadata:
+  name: loki-external
+  namespace: monitoring
+  labels:
+    app: loki
+  annotations:
+    # MetalLB annotation for IP allocation (if using MetalLB)
+    metallb.universe.tf/loadBalancerIPs: "10.0.60.32"
+spec:
+  type: LoadBalancer
+  loadBalancerIP: 10.0.60.32
+  selector:
+    # Selector matches loki-stack deployment labels
+    app: loki
+    release: loki
+  ports:
+    - name: http
+      port: 3100
+      targetPort: 3100
+      protocol: TCP
+---
+# NetworkPolicy to allow external Promtail connections
+# Only allows traffic from known Promtail source IPs
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: loki-external-allow
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app: loki
+  policyTypes:
+    - Ingress
+  ingress:
+    # Allow from within cluster
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 3100
+    # Allow from Pi-hole (10.0.60.55)
+    - from:
+        - ipBlock:
+            cidr: 10.0.60.55/32
+      ports:
+        - protocol: TCP
+          port: 3100
+    # Allow from VM 111 (10.0.70.10)
+    - from:
+        - ipBlock:
+            cidr: 10.0.70.10/32
+      ports:
+        - protocol: TCP
+          port: 3100
+    # Allow from VLAN 60 subnet for flexibility
+    - from:
+        - ipBlock:
+            cidr: 10.0.60.0/24
+      ports:
+        - protocol: TCP
+          port: 3100

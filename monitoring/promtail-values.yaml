@@ -1,0 +1,18 @@
+# Promtail Helm Values — ships k3s logs to Loki on VM 100
+# Install: helm install promtail grafana/promtail -n monitoring --create-namespace -f promtail-values.yaml
+# Repo:    helm repo add grafana https://grafana.github.io/helm-charts
+config:
+  clients:
+    - url: https://10.0.60.11:3100/loki/api/v1/push
+      tls_config:
+        insecure_skip_verify: true
+      external_labels:
+        cluster: k3s
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi

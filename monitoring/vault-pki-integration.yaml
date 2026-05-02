@@ -1,0 +1,260 @@
+---
+# Vault PKI Integration for Monitoring Stack
+# Uses HashiCorp Vault as the certificate authority for all internal TLS
+#
+# Prerequisites:
+#   - Vault running and unsealed (10.0.60.11:8200 or in k3s)
+#   - Vault PKI secrets engine enabled
+#   - cert-manager vault-issuer configured
+#
+# Reference: https://cert-manager.io/docs/configuration/vault/
+
+# =============================================================================
+# Step 1: Configure Vault PKI Engine (run on Vault server)
+# =============================================================================
+#
+# Enable PKI secrets engine:
+#   vault secrets enable pki
+#   vault secrets tune -max-lease-ttl=87600h pki
+#
+# Generate root CA:
+#   vault write -field=certificate pki/root/generate/internal \
+#     common_name="homelab-root-ca" \
+#     issuer_name="homelab-root" \
+#     ttl=87600h > /tmp/root_ca.crt
+#
+# Configure CA and CRL URLs:
+#   vault write pki/config/urls \
+#     issuing_certificates="https://vault.home.example.home/v1/pki/ca" \
+#     crl_distribution_points="https://vault.home.example.home/v1/pki/crl"
+#
+# Create intermediate CA for Linkerd:
+#   vault secrets enable -path=pki_linkerd pki
+#   vault secrets tune -max-lease-ttl=43800h pki_linkerd
+#
+#   vault write -format=json pki_linkerd/intermediate/generate/internal \
+#     common_name="linkerd-identity-issuer" \
+#     issuer_name="linkerd-issuer" \
+#     | jq -r '.data.csr' > /tmp/linkerd_intermediate.csr
+#
+#   vault write -format=json pki/root/sign-intermediate \
+#     issuer_ref="homelab-root" \
+#     csr=@/tmp/linkerd_intermediate.csr \
+#     format=pem_bundle \
+#     ttl="43800h" \
+#     | jq -r '.data.certificate' > /tmp/linkerd_intermediate.crt
+#
+#   vault write pki_linkerd/intermediate/set-signed \
+#     certificate=@/tmp/linkerd_intermediate.crt
+#
+# Create role for node_exporter certificates:
+#   vault write pki/roles/node-exporter \
+#     allowed_domains="example.home,local" \
+#     allow_subdomains=true \
+#     allow_any_name=true \
+#     max_ttl="8760h" \
+#     key_type="ec" \
+#     key_bits=256
+#
+# Create role for Linkerd:
+#   vault write pki_linkerd/roles/linkerd-identity \
+#     allowed_domains="linkerd.cluster.local" \
+#     allow_subdomains=true \
+#     max_ttl="24h" \
+#     key_type="ec" \
+#     key_bits=256
+#
+# Create policy for cert-manager:
+#   vault policy write cert-manager-pki - <<EOF
+#   path "pki/sign/node-exporter" {
+#     capabilities = ["create", "update"]
+#   }
+#   path "pki/issue/node-exporter" {
+#     capabilities = ["create"]
+#   }
+#   path "pki_linkerd/sign/linkerd-identity" {
+#     capabilities = ["create", "update"]
+#   }
+#   path "pki_linkerd/issue/linkerd-identity" {
+#     capabilities = ["create"]
+#   }
+#   EOF
+#
+# Create AppRole for cert-manager:
+#   vault auth enable approle
+#   vault write auth/approle/role/cert-manager \
+#     token_policies="cert-manager-pki" \
+#     token_ttl=1h \
+#     token_max_ttl=4h
+#
+#   vault read auth/approle/role/cert-manager/role-id
+#   vault write -f auth/approle/role/cert-manager/secret-id
+
+# =============================================================================
+# Step 2: Create Vault AppRole Secret in Kubernetes
+# =============================================================================
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vault-approle-credentials
+  namespace: cert-manager
+type: Opaque
+stringData:
+  # REPLACE with actual values from Vault
+  role-id: "REPLACE_WITH_ROLE_ID"
+  secret-id: "REPLACE_WITH_SECRET_ID"
+
+---
+# =============================================================================
+# Step 3: Create ClusterIssuer for Vault PKI
+# =============================================================================
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: vault-pki-issuer
+spec:
+  vault:
+    # Vault server address
+    # Use internal address if Vault is in k3s, external if on VM 100
+    server: http://10.0.60.11:8200
+    path: pki/sign/node-exporter
+    # For Kubernetes auth (if Vault is in cluster):
+    # auth:
+    #   kubernetes:
+    #     role: cert-manager
+    #     mountPath: /v1/auth/kubernetes
+    #     serviceAccountRef:
+    #       name: cert-manager
+    # For AppRole auth (external Vault):
+    auth:
+      appRole:
+        path: approle
+        roleId: "REPLACE_WITH_ROLE_ID"
+        secretRef:
+          name: vault-approle-credentials
+          key: secret-id
+
+---
+# ClusterIssuer specifically for Linkerd certificates
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: vault-linkerd-issuer
+spec:
+  vault:
+    server: http://10.0.60.11:8200
+    path: pki_linkerd/sign/linkerd-identity
+    auth:
+      appRole:
+        path: approle
+        roleId: "REPLACE_WITH_ROLE_ID"
+        secretRef:
+          name: vault-approle-credentials
+          key: secret-id
+
+---
+# =============================================================================
+# Step 4: Certificate for Linkerd Trust Anchor (issued by Vault)
+# =============================================================================
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: linkerd-trust-anchor
+  namespace: linkerd
+spec:
+  secretName: linkerd-trust-anchor
+  duration: 87600h  # 10 years
+  renewBefore: 8760h  # 1 year before expiry
+  isCA: true
+  commonName: root.linkerd.cluster.local
+  issuerRef:
+    name: vault-pki-issuer
+    kind: ClusterIssuer
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+
+---
+# Certificate for Linkerd Identity Issuer
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: linkerd-identity-issuer
+  namespace: linkerd
+spec:
+  secretName: linkerd-identity-issuer
+  duration: 8760h  # 1 year
+  renewBefore: 720h  # 30 days before expiry
+  isCA: true
+  commonName: identity.linkerd.cluster.local
+  dnsNames:
+    - identity.linkerd.cluster.local
+  issuerRef:
+    name: vault-linkerd-issuer
+    kind: ClusterIssuer
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+
+---
+# =============================================================================
+# Step 5: Certificates for Node Exporters (request from Vault)
+# =============================================================================
+# These are issued to external hosts. Use Vault agent or manual issuance.
+#
+# Manual issuance for each host:
+#   vault write pki/issue/node-exporter \
+#     common_name="truenas.local" \
+#     alt_names="10.0.60.21" \
+#     ttl="8760h" \
+#     -format=json > /tmp/truenas-cert.json
+#
+#   jq -r '.data.certificate' /tmp/truenas-cert.json > /etc/node_exporter/certs/node_exporter.crt
+#   jq -r '.data.private_key' /tmp/truenas-cert.json > /etc/node_exporter/certs/node_exporter.key
+#   jq -r '.data.ca_chain[]' /tmp/truenas-cert.json > /etc/node_exporter/certs/ca.crt
+#
+# Or use Vault Agent for automatic renewal:
+#   Install vault-agent as systemd service on each host
+#   Configure template to render certificates
+
+---
+# =============================================================================
+# Step 6: ConfigMap with Vault CA for Prometheus
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-ca-cert
+  namespace: monitoring
+data:
+  # Export CA cert from Vault:
+  #   vault read -field=certificate pki/cert/ca > vault-ca.crt
+  ca.crt: |
+    -----BEGIN CERTIFICATE-----
+    REPLACE_WITH_VAULT_ROOT_CA_CERTIFICATE
+    -----END CERTIFICATE-----
+
+---
+# =============================================================================
+# Step 7: Update Prometheus to trust Vault CA
+# =============================================================================
+# Add to prometheus-values.yaml:
+#
+# prometheus:
+#   prometheusSpec:
+#     volumes:
+#       - name: vault-ca
+#         configMap:
+#           name: vault-ca-cert
+#     volumeMounts:
+#       - name: vault-ca
+#         mountPath: /etc/prometheus/vault-ca
+#         readOnly: true
+#
+#     additionalScrapeConfigs:
+#       - job_name: 'truenas'
+#         scheme: https
+#         tls_config:
+#           ca_file: /etc/prometheus/vault-ca/ca.crt
+#         static_configs:
+#           - targets: ['10.0.60.21:9100']

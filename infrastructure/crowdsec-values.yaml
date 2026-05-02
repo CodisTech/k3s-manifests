@@ -1,0 +1,39 @@
+# CrowdSec Helm Values for k3s
+# Install: helm install crowdsec crowdsecurity/crowdsec -n crowdsec --create-namespace -f crowdsec-values.yaml
+# Repo:    helm repo add crowdsecurity https://crowdsecurity.github.io/helm-charts
+container_runtime: containerd
+
+lapi:
+  persistentVolume:
+    data:
+      enabled: true
+      storageClassName: longhorn
+      size: 1Gi
+    config:
+      enabled: true
+      storageClassName: longhorn
+      size: 100Mi
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 100m
+    limits:
+      memory: 256Mi
+      cpu: 500m
+
+agent:
+  env:
+    - name: COLLECTIONS
+      value: "crowdsecurity/traefik crowdsecurity/http-cve crowdsecurity/base-http-scenarios crowdsecurity/whitelist-good-actors"
+  acquisition:
+    - namespace: traefik
+      podName: traefik-*
+      program: traefik
+      poll_without_inotify: true
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 100m
+    limits:
+      memory: 256Mi
+      cpu: 500m

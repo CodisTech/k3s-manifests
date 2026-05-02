@@ -1,0 +1,101 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tautulli
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: tautulli-config-longhorn
+  namespace: tautulli
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tautulli
+  namespace: tautulli
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: tautulli
+  template:
+    metadata:
+      labels:
+        app: tautulli
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/hostname
+                operator: NotIn
+                values:
+                - k3s-worker-2
+      containers:
+      - name: tautulli
+        image: ghcr.io/tautulli/tautulli:latest
+        ports:
+        - containerPort: 8181
+        env:
+        - name: TZ
+          value: "America/New_York"
+        - name: PUID
+          value: "1000"
+        - name: PGID
+          value: "1000"
+        volumeMounts:
+        - name: config
+          mountPath: /config
+      volumes:
+      - name: config
+        persistentVolumeClaim:
+          claimName: tautulli-config-longhorn
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tautulli
+  namespace: tautulli
+spec:
+  selector:
+    app: tautulli
+  ports:
+  - port: 80
+    targetPort: 8181
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: tautulli-ingress
+  namespace: tautulli
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-cloudflare"
+spec:
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - tautulli.home.example.home
+    secretName: tautulli-tls
+  rules:
+  - host: tautulli.home.example.home
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: tautulli
+            port:
+              number: 80

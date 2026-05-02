@@ -1,0 +1,105 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: plex
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: plex-config-nfs
+  namespace: plex
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nfs-critical
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: plex
+  namespace: plex
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: plex
+  template:
+    metadata:
+      labels:
+        app: plex
+    spec:
+      runtimeClassName: nvidia
+      nodeSelector:
+        kubernetes.io/hostname: k3s-worker-1
+      containers:
+      - name: plex
+        image: plexinc/pms-docker:latest
+        ports:
+        - containerPort: 32400
+        env:
+        - name: TZ
+          value: "America/New_York"
+        - name: PLEX_CLAIM
+          value: ""  # Get claim token from https://plex.tv/claim
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: "all"
+        - name: NVIDIA_DRIVER_CAPABILITIES
+          value: "all"
+        resources: {}
+        volumeMounts:
+        - name: config
+          mountPath: /config
+        - name: media
+          mountPath: /media
+          readOnly: true
+      volumes:
+      - name: config
+        hostPath:
+          path: /opt/k3s-local/plex-config
+          type: DirectoryOrCreate
+      - name: media
+        nfs:
+          server: 10.0.60.9
+          path: /storage/media
+          readOnly: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: plex
+  namespace: plex
+spec:
+  selector:
+    app: plex
+  ports:
+  - port: 80
+    targetPort: 32400
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: plex-ingress
+  namespace: plex
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-cloudflare"
+spec:
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - plex.home.example.home
+    secretName: plex-tls
+  rules:
+  - host: plex.home.example.home
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: plex
+            port:
+              number: 80

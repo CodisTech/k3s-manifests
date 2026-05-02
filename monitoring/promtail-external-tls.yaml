@@ -1,0 +1,133 @@
+# External Promtail Configuration with TLS
+# Apply this config to Promtail instances running outside the k3s cluster
+#
+# Locations:
+#   - Pi-hole (10.0.60.55): /etc/promtail/config.yml
+#   - VM 111 (10.0.70.10): /etc/promtail/config.yml
+#
+# After updating, restart Promtail:
+#   sudo systemctl restart promtail
+
+# =============================================================================
+# Pi-hole Promtail Config (/etc/promtail/config.yml)
+# =============================================================================
+# server:
+#   http_listen_port: 9080
+#   grpc_listen_port: 0
+#
+# positions:
+#   filename: /var/lib/promtail/positions.yaml
+#
+# clients:
+#   - url: https://loki.home.example.home/loki/api/v1/push
+#     # TLS is handled by the server certificate (Let's Encrypt)
+#     # No client cert needed for push
+#     tls_config:
+#       insecure_skip_verify: false
+#     # Optional: Add tenant ID for multi-tenancy
+#     # tenant_id: pihole
+#
+# scrape_configs:
+#   - job_name: pihole
+#     static_configs:
+#       - targets:
+#           - localhost
+#         labels:
+#           job: pihole
+#           host: pihole
+#           __path__: /var/log/pihole/*.log
+#
+#   - job_name: pihole-ftl
+#     static_configs:
+#       - targets:
+#           - localhost
+#         labels:
+#           job: pihole-ftl
+#           host: pihole
+#           __path__: /var/log/pihole-FTL.log
+#
+#   - job_name: dnsmasq
+#     static_configs:
+#       - targets:
+#           - localhost
+#         labels:
+#           job: dnsmasq
+#           host: pihole
+#           __path__: /var/log/dnsmasq.log
+
+# =============================================================================
+# VM 111 Promtail Config (/etc/promtail/config.yml)
+# =============================================================================
+# server:
+#   http_listen_port: 9080
+#   grpc_listen_port: 0
+#
+# positions:
+#   filename: /var/lib/promtail/positions.yaml
+#
+# clients:
+#   - url: https://loki.home.example.home/loki/api/v1/push
+#     tls_config:
+#       insecure_skip_verify: false
+#
+# scrape_configs:
+#   - job_name: system
+#     static_configs:
+#       - targets:
+#           - localhost
+#         labels:
+#           job: varlogs
+#           host: vm111
+#           __path__: /var/log/*.log
+#
+#   - job_name: journal
+#     journal:
+#       max_age: 12h
+#       labels:
+#         job: systemd-journal
+#         host: vm111
+#     relabel_configs:
+#       - source_labels: ['__journal__systemd_unit']
+#         target_label: 'unit'
+#
+#   - job_name: gitea
+#     static_configs:
+#       - targets:
+#           - localhost
+#         labels:
+#           job: gitea
+#           host: vm111
+#           __path__: /var/lib/gitea/log/*.log
+#
+#   - job_name: n8n
+#     static_configs:
+#       - targets:
+#           - localhost
+#         labels:
+#           job: n8n
+#           host: vm111
+#           __path__: /var/log/n8n/*.log
+
+# =============================================================================
+# Deployment Commands
+# =============================================================================
+#
+# On Pi-hole:
+#   sudo nano /etc/promtail/config.yml
+#   # Paste the Pi-hole config above
+#   sudo systemctl restart promtail
+#   sudo systemctl status promtail
+#   # Verify TLS connection
+#   curl -v https://loki.home.example.home/ready
+#
+# On VM 111:
+#   sudo nano /etc/promtail/config.yml
+#   # Paste the VM 111 config above
+#   sudo systemctl restart promtail
+#   sudo systemctl status promtail
+#   # Verify TLS connection
+#   curl -v https://loki.home.example.home/ready
+#
+# Verify logs are arriving in Grafana:
+#   Query: {host="pihole"}
+#   Query: {host="vm111"}

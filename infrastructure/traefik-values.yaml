@@ -1,0 +1,41 @@
+# Traefik Helm Values for k3s
+# Upgrade: helm upgrade traefik traefik/traefik -n traefik -f traefik-values.yaml
+# Repo:    helm repo add traefik https://traefik.github.io/charts
+deployment:
+  replicas: 2
+  additionalVolumes:
+    - name: access-logs
+      emptyDir: {}
+ingressRoute:
+  dashboard:
+    enabled: true
+ports:
+  web:
+    exposedPort: 80
+  websecure:
+    exposedPort: 443
+service:
+  type: LoadBalancer
+logs:
+  access:
+    enabled: true
+    filePath: /var/log/traefik/access.log
+    format: json
+additionalVolumeMounts:
+  - name: access-logs
+    mountPath: /var/log/traefik
+experimental:
+  plugins:
+    crowdsec-bouncer:
+      moduleName: github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin
+      version: v1.4.2
+additionalArguments:
+  - --entryPoints.websecure.http.middlewares=traefik-crowdsec-bouncer@kubernetescrd
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: traefik
+        app.kubernetes.io/instance: traefik-traefik

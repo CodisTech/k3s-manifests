@@ -1,0 +1,29 @@
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: nfs-media
+spec:
+  capacity:
+    storage: 25Ti
+  accessModes:
+    - ReadOnlyMany
+  storageClassName: ""
+  nfs:
+    server: 10.0.60.9
+    path: /storage/media
+  persistentVolumeReclaimPolicy: Retain
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: media-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadOnlyMany
+  storageClassName: ""
+  resources:
+    requests:
+      storage: 25Ti
+  volumeName: nfs-media

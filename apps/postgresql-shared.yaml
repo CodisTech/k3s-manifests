@@ -1,0 +1,105 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: postgresql
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgresql-data-longhorn
+  namespace: postgresql
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  volumeName: postgresql-data-longhorn-pv
+  resources:
+    requests:
+      storage: 20Gi
+---
+# Secret is managed by ExternalSecret (postgresql-externalsecret.yaml)
+# Pulls from HashiCorp Vault: secret/postgresql
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgresql
+  namespace: postgresql
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgresql
+  template:
+    metadata:
+      labels:
+        app: postgresql
+    spec:
+      containers:
+      - name: postgresql
+        image: postgres:15-alpine
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_USER
+          value: "postgres"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-secrets
+              key: POSTGRES_PASSWORD
+        - name: POSTGRES_DB
+          value: "postgres"
+        - name: PGDATA
+          value: "/var/lib/postgresql/data/pgdata"
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+        - name: init-scripts
+          mountPath: /docker-entrypoint-initdb.d
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: postgresql-data-longhorn
+      - name: init-scripts
+        configMap:
+          name: postgresql-init
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgresql-init
+  namespace: postgresql
+data:
+  init-databases.sql: |
+    -- Vaultwarden database
+    CREATE DATABASE vaultwarden;
+
+    -- Authentik database (for future)
+    CREATE DATABASE authentik;
+
+    -- Gitea database (for future)
+    CREATE DATABASE gitea;
+
+    -- n8n database (for future)
+    CREATE DATABASE n8n;
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgresql
+  namespace: postgresql
+spec:
+  selector:
+    app: postgresql
+  ports:
+  - port: 5432
+    targetPort: 5432

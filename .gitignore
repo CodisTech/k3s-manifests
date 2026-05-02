@@ -1,0 +1,20 @@
+# Obsidian
+.obsidian/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Secrets (never commit unencrypted)
+*-secret.yaml
+*-credentials.yaml
+*.key
+*.pem
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+
+# Helm chart downloads
+charts/

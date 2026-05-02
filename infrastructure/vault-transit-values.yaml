@@ -1,0 +1,44 @@
+server:
+  standalone:
+    enabled: true
+    config: |
+      ui = true
+
+      listener "tcp" {
+        tls_disable = 1
+        address = "[::]:8200"
+        cluster_address = "[::]:8201"
+      }
+
+      storage "file" {
+        path = "/vault/data"
+      }
+
+      seal "transit" {
+        address = "http://10.0.60.11:8200"
+        token = "REPLACE_WITH_VAULT_TRANSIT_TOKEN"  # SECURITY: Manage via ExternalSecret/SOPS - do not store plaintext tokens in repo
+        disable_renewal = "false"
+        key_name = "autounseal"
+        mount_path = "transit/"
+      }
+
+  dataStorage:
+    enabled: true
+    size: 10Gi
+    storageClass: longhorn
+
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    hosts:
+      - host: vault.home.example.home
+    tls:
+      - hosts:
+          - vault.home.example.home
+        secretName: vault-tls
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-cloudflare
+
+ui:
+  enabled: true
+  serviceType: ClusterIP

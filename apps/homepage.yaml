@@ -1,0 +1,713 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: homepage
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: homepage
+  namespace: homepage
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: homepage
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces", "pods", "nodes"]
+    verbs: ["get", "list"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets"]
+    verbs: ["get", "list"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: homepage
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: homepage
+subjects:
+  - kind: ServiceAccount
+    name: homepage
+    namespace: homepage
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: homepage-config
+  namespace: homepage
+data:
+  settings.yaml: |
+    title: CODISTECH HomeLab
+    favicon: /icons/logo.png
+    theme: dark
+    color: slate
+    headerStyle: underlined
+    disableCollapse: false
+    useEqualHeights: true
+    hideVersion: true
+    allowedHosts:
+      - homepage.home.example.home
+    layout:
+      Infrastructure:
+        style: row
+        columns: 4
+        icon: mdi-server-network
+      Network & Security:
+        style: row
+        columns: 4
+        icon: mdi-shield-lock
+      Monitoring & Observability:
+        style: row
+        columns: 5
+        icon: mdi-chart-line
+      Identity & Access:
+        style: row
+        columns: 2
+        icon: mdi-account-lock
+      Automation & DevOps:
+        style: row
+        columns: 4
+        icon: mdi-robot
+      Media - Streaming:
+        style: row
+        columns: 4
+        icon: mdi-play-circle
+      Media - Management:
+        style: row
+        columns: 4
+        icon: mdi-movie-search
+      Cloud & Storage:
+        style: row
+        columns: 3
+        icon: mdi-cloud
+      Smart Home:
+        style: row
+        columns: 2
+        icon: mdi-home-automation
+      PETNET Maintenance:
+        style: row
+        columns: 2
+        icon: mdi-clipboard-check
+      CyberReadyLabs:
+        style: row
+        columns: 5
+        icon: mdi-shield-check
+
+  services.yaml: |
+    - Infrastructure:
+        - Proxmox A:
+            icon: proxmox.png
+            href: https://10.0.60.10:8006
+            description: Ryzen 9 5900X / 128GB
+            widget:
+              type: proxmox
+              url: https://10.0.60.10:8006
+              username: "{{HOMEPAGE_VAR_PROXMOX_A_TOKEN}}"
+              password: "{{HOMEPAGE_VAR_PROXMOX_A_SECRET}}"
+              node: pve-server-a
+        - Proxmox C (nas):
+            icon: proxmox.png
+            href: https://10.0.60.9:8006
+            description: Ryzen 9 7900X / 128GB
+            widget:
+              type: proxmox
+              url: https://10.0.60.9:8006
+              username: "{{HOMEPAGE_VAR_PROXMOX_C_TOKEN}}"
+              password: "{{HOMEPAGE_VAR_PROXMOX_C_SECRET}}"
+              node: nas
+        - Proxmox D:
+            icon: proxmox.png
+            href: https://10.0.60.8:8006
+            description: Intel i5-6500 / 8GB
+            widget:
+              type: proxmox
+              url: https://10.0.60.8:8006
+              username: "{{HOMEPAGE_VAR_PROXMOX_D_TOKEN}}"
+              password: "{{HOMEPAGE_VAR_PROXMOX_D_SECRET}}"
+              node: pve-server-d
+        - Longhorn:
+            icon: longhorn.png
+            href: https://longhorn.home.example.home
+            description: Kubernetes storage
+        - Portainer:
+            icon: portainer.png
+            href: https://portainer.local.example.home
+            description: Docker container management
+
+    - Network & Security:
+        - OPNsense:
+            icon: opnsense.png
+            href: https://10.0.0.1
+            description: Firewall / Router
+        - CrowdSec:
+            icon: crowdsec.png
+            description: Intrusion detection (CLI only)
+        - Pi-hole 1:
+            icon: pi-hole.png
+            href: http://10.0.60.55:8080/admin
+            description: Primary DNS (10.0.60.55)
+            widget:
+              type: pihole
+              url: http://10.0.60.55:8080
+              version: 6
+              key: "{{HOMEPAGE_VAR_PIHOLE_1_KEY}}"
+        - Pi-hole 2:
+            icon: pi-hole.png
+            href: https://pihole2.local.example.home/admin
+            description: Secondary DNS (10.0.60.11)
+            widget:
+              type: pihole
+              url: https://pihole2.local.example.home
+              version: 6
+              key: "{{HOMEPAGE_VAR_PIHOLE_2_KEY}}"
+
+    - Monitoring & Observability:
+        - Grafana:
+            icon: grafana.png
+            href: https://grafana.local.example.home
+            description: Dashboards & visualization
+        - Prometheus:
+            icon: prometheus.png
+            href: https://prometheus.local.example.home
+            description: Metrics collection
+            widget:
+              type: prometheus
+              url: http://10.0.60.11:9090
+        - CheckMate:
+            icon: mdi-check-network
+            href: https://checkmate.local.example.home
+            description: Uptime monitoring
+        - Wazuh:
+            icon: wazuh.png
+            href: https://wazuh.local.example.home
+            description: SIEM / XDR
+        - Healthchecks.io:
+            icon: healthchecks.png
+            href: https://healthchecks.io/projects/16de75bc-eb36-4068-9e76-907570c8c174/checks/
+            description: Off-site dead-man's switch
+            widget:
+              type: healthchecks
+              url: https://healthchecks.io
+              key: "{{HOMEPAGE_VAR_HEALTHCHECKS_KEY}}"
+
+    - Identity & Access:
+        - Authentik:
+            icon: authentik.png
+            href: https://auth.local.example.home
+            description: Identity provider / SSO
+            widget:
+              type: authentik
+              url: http://10.0.60.11:9000
+              key: "{{HOMEPAGE_VAR_AUTHENTIK_KEY}}"
+        - Teleport:
+            icon: teleport.png
+            href: https://teleport.home.example.home
+            description: Zero-trust access gateway
+
+    - Automation & DevOps:
+        - Semaphore:
+            icon: semaphore.png
+            href: https://semaphore.home.example.home
+            description: Ansible automation UI
+        - Gitea:
+            icon: gitea.png
+            href: https://git.local.example.home
+            description: Git repository hosting
+        - n8n:
+            icon: n8n.png
+            href: https://n8n.local.example.home
+            description: Workflow automation
+        - Traefik (Docker):
+            icon: traefik.png
+            href: https://traefik.local.example.home
+            description: Reverse proxy (VM 100)
+        - Traefik (k3s):
+            icon: traefik.png
+            href: https://traefik-k3s.home.example.home
+            description: Reverse proxy (k3s cluster)
+
+    - Media - Streaming:
+        - Plex:
+            icon: plex.png
+            href: https://plex.home.example.home
+            description: Media server (GPU)
+            widget:
+              type: plex
+              url: http://plex.plex.svc.cluster.local
+              key: "{{HOMEPAGE_VAR_PLEX_KEY}}"
+        - Jellyfin:
+            icon: jellyfin.png
+            href: https://jellyfin.home.example.home
+            description: Media server (open source)
+            widget:
+              type: jellyfin
+              url: http://jellyfin.jellyfin.svc.cluster.local
+              key: "{{HOMEPAGE_VAR_JELLYFIN_KEY}}"
+        - Tautulli:
+            icon: tautulli.png
+            href: https://tautulli.home.example.home
+            description: Plex monitoring
+            widget:
+              type: tautulli
+              url: http://tautulli.tautulli.svc.cluster.local
+              key: "{{HOMEPAGE_VAR_TAUTULLI_KEY}}"
+        - Jellystat:
+            icon: mdi-chart-box
+            href: https://jellystat.home.example.home
+            description: Jellyfin statistics
+
+    - Media - Management:
+        - Radarr:
+            icon: radarr.png
+            href: https://radarr.local.example.home
+            description: Movie management
+            widget:
+              type: radarr
+              url: http://10.0.60.11:7878
+              key: "{{HOMEPAGE_VAR_RADARR_KEY}}"
+        - Sonarr:
+            icon: sonarr.png
+            href: https://sonarr.local.example.home
+            description: TV series management
+            widget:
+              type: sonarr
+              url: http://10.0.60.11:8989
+              key: "{{HOMEPAGE_VAR_SONARR_KEY}}"
+        - Prowlarr:
+            icon: prowlarr.png
+            href: https://prowlarr.local.example.home
+            description: Indexer management
+            widget:
+              type: prowlarr
+              url: http://10.0.60.11:9696
+              key: "{{HOMEPAGE_VAR_PROWLARR_KEY}}"
+        - Jellyseerr:
+            icon: jellyseerr.png
+            href: https://jellyseerr.home.example.home
+            description: Media requests
+            widget:
+              type: jellyseerr
+              url: http://jellyseerr.jellyseerr.svc.cluster.local
+              key: "{{HOMEPAGE_VAR_JELLYSEERR_KEY}}"
+        - qBittorrent:
+            icon: qbittorrent.png
+            href: https://qbit.local.example.home
+            description: Download client
+            widget:
+              type: qbittorrent
+              url: https://qbit.local.example.home
+              username: "{{HOMEPAGE_VAR_QBITTORRENT_USER}}"
+              password: "{{HOMEPAGE_VAR_QBITTORRENT_PASS}}"
+        - Tdarr:
+            icon: tdarr.png
+            href: https://tdarr.home.example.home
+            description: Distributed transcoding
+            widget:
+              type: tdarr
+              url: http://tdarr-server.tdarr.svc.cluster.local
+        - Notifiarr:
+            icon: notifiarr.png
+            href: https://notifiarr.local.example.home
+            description: Notification relay
+        - youtube-dl:
+            icon: youtube.png
+            href: https://ytdl.local.example.home
+            description: Video downloader
+
+    - Cloud & Storage:
+        - Nextcloud:
+            icon: nextcloud.png
+            href: https://nextcloud.local.example.home
+            description: Private cloud
+        - FileBrowser:
+            icon: filebrowser.png
+            href: https://files.local.example.home
+            description: File management UI
+        - Vaultwarden:
+            icon: vaultwarden.png
+            href: https://vaultwarden.home.example.home
+            description: Password manager
+        - Vault:
+            icon: vault.png
+            href: https://vault.home.example.home
+            description: Secrets management
+
+    - Smart Home:
+        - Home Assistant:
+            icon: home-assistant.png
+            href: https://ha.local.example.home
+            description: Smart home controller
+        - UniFi:
+            icon: unifi.png
+            href: https://unifi.local.example.home
+            description: Network controller
+
+    - PETNET Maintenance:
+        - PETNET (Public):
+            icon: mdi-clipboard-check
+            href: https://maint.example.home
+            description: Maintenance log (Authentik SSO)
+        - PETNET (Local):
+            icon: mdi-clipboard-check
+            href: https://maint.home.example.home
+            description: Maintenance log (LAN direct)
+
+    - CyberReadyLabs:
+        - CyberReadyLabs:
+            icon: mdi-shield-check
+            href: https://cyberreadylabs.com
+            description: Production site
+        - CRL Staging:
+            icon: mdi-web
+            href: https://staging.cyberreadylabs.com
+            description: Staging site
+        - Contact Card:
+            icon: mdi-card-account-details
+            href: https://contact.cyberreadylabs.com
+            description: Digital business card
+        - CRL CRM:
+            icon: notion.png
+            href: https://notion.so
+            description: CRM (Notion)
+        - Firefly III:
+            icon: firefly.png
+            href: https://firefly.local.example.home
+            description: Personal finance
+        - Umami:
+            icon: umami.png
+            href: https://umami.local.example.home
+            description: Web analytics
+        - Cal.com:
+            icon: cal-com.png
+            href: https://cal.com
+            description: Scheduling
+
+  bookmarks.yaml: |
+    - Documentation:
+        - Kubernetes Docs:
+            - icon: kubernetes.png
+              href: https://kubernetes.io/docs/
+        - Ansible Docs:
+            - icon: ansible.png
+              href: https://docs.ansible.com/
+        - Proxmox Docs:
+            - icon: proxmox.png
+              href: https://pve.proxmox.com/wiki/Main_Page
+
+  widgets.yaml: |
+    - logo:
+        icon: /icons/logo.png
+    - kubernetes:
+        cluster:
+          show: true
+          cpu: true
+          memory: true
+          showLabel: true
+          label: "k3s cluster"
+        nodes:
+          show: true
+          cpu: true
+          memory: true
+          showLabel: true
+    - datetime:
+        text_size: xl
+        format:
+          dateStyle: long
+          timeStyle: short
+          hour12: true
+    - search:
+        provider: duckduckgo
+        target: _blank
+
+  kubernetes.yaml: |
+    mode: cluster
+  docker.yaml: ""
+  custom.css: |
+    body, #__next, .bg-theme-50, .dark\:bg-theme-900 {
+      background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 25%, #16213e 50%, #0f3460 75%, #1a1a2e 100%) !important;
+      background-attachment: fixed !important;
+    }
+  custom.js: ""
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: homepage-data-longhorn
+  namespace: homepage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: homepage
+  namespace: homepage
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: homepage
+  template:
+    metadata:
+      labels:
+        app: homepage
+    spec:
+      serviceAccountName: homepage
+      containers:
+      - name: homepage
+        image: ghcr.io/gethomepage/homepage:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: TZ
+          value: "America/New_York"
+        - name: HOMEPAGE_ALLOWED_HOSTS
+          value: "homepage.home.example.home"
+        # Proxmox API tokens (username=user@pam!tokenid, secret=uuid)
+        - name: HOMEPAGE_VAR_PROXMOX_A_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: homepage-secrets
+              key: PROXMOX_A_TOKEN
+        - name: HOMEPAGE_VAR_PROXMOX_A_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: homepage-secrets
+              key: PROXMOX_A_SECRET
+        - name: HOMEPAGE_VAR_PROXMOX_C_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: homepage-secrets
+              key: PROXMOX_C_TOKEN
+        - name: HOMEPAGE_VAR_PROXMOX_C_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: homepage-secrets
+              key: PROXMOX_C_SECRET
+        - name: HOMEPAGE_VAR_PROXMOX_D_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: homepage-secrets
+              key: PROXMOX_D_TOKEN
+        - name: HOMEPAGE_VAR_PROXMOX_D_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: homepage-secrets
+              key: PROXMOX_D_SECRET
+        # Pi-hole API keys
+        - name: HOMEPAGE_VAR_PIHOLE_1_KEY
+          valueFrom:
+            secretKeyRef:
+              name: homepage-secrets
+              key: PIHOLE_1_KEY
+        - name: HOMEPAGE_VAR_PIHOLE_2_KEY
+          valueFrom:
+            secretKeyRef:
+              name: homepage-secrets
+              key: PIHOLE_2_KEY
+        # Portainer
+        - name: HOMEPAGE_VAR_PORTAINER_KEY
+          valueFrom:
+            secretKeyRef:
+              name: homepage-secrets
+              key: PORTAINER_KEY
+        # Grafana
+        - name: HOMEPAGE_VAR_GRAFANA_KEY
+          valueFrom:
+            secretKeyRef:
+              name: homepage-secrets
+              key: GRAFANA_KEY
+        # Authentik
+        - name: HOMEPAGE_VAR_AUTHENTIK_KEY
+          valueFrom:
+            secretKeyRef:
+              name: homepage-secrets
+              key: AUTHENTIK_KEY
+        # Plex
+        - name: HOMEPAGE_VAR_PLEX_KEY
+          valueFrom:
+            secretKeyRef:
+              name: homepage-secrets
+              key: PLEX_KEY
+        # Jellyfin
+        - name: HOMEPAGE_VAR_JELLYFIN_KEY
+          valueFrom:
+            secretKeyRef:
+              name: homepage-secrets
+              key: JELLYFIN_KEY
+        # Tautulli
+        - name: HOMEPAGE_VAR_TAUTULLI_KEY
+          valueFrom:
+            secretKeyRef:
+              name: homepage-secrets
+              key: TAUTULLI_KEY
+        # Radarr
+        - name: HOMEPAGE_VAR_RADARR_KEY
+          valueFrom:
+            secretKeyRef:
+              name: homepage-secrets
+              key: RADARR_KEY
+        # Sonarr
+        - name: HOMEPAGE_VAR_SONARR_KEY
+          valueFrom:
+            secretKeyRef:
+              name: homepage-secrets
+              key: SONARR_KEY
+        # Prowlarr
+        - name: HOMEPAGE_VAR_PROWLARR_KEY
+          valueFrom:
+            secretKeyRef:
+              name: homepage-secrets
+              key: PROWLARR_KEY
+        # Jellyseerr
+        - name: HOMEPAGE_VAR_JELLYSEERR_KEY
+          valueFrom:
+            secretKeyRef:
+              name: homepage-secrets
+              key: JELLYSEERR_KEY
+        # qBittorrent
+        - name: HOMEPAGE_VAR_QBITTORRENT_USER
+          valueFrom:
+            secretKeyRef:
+              name: homepage-secrets
+              key: QBITTORRENT_USER
+        - name: HOMEPAGE_VAR_QBITTORRENT_PASS
+          valueFrom:
+            secretKeyRef:
+              name: homepage-secrets
+              key: QBITTORRENT_PASS
+        # Home Assistant
+        - name: HOMEPAGE_VAR_HASS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: homepage-secrets
+              key: HASS_KEY
+        # UniFi
+        - name: HOMEPAGE_VAR_UNIFI_USER
+          valueFrom:
+            secretKeyRef:
+              name: homepage-secrets
+              key: UNIFI_USER
+        - name: HOMEPAGE_VAR_UNIFI_PASS
+          valueFrom:
+            secretKeyRef:
+              name: homepage-secrets
+              key: UNIFI_PASS
+        # Nextcloud
+        - name: HOMEPAGE_VAR_NEXTCLOUD_USER
+          valueFrom:
+            secretKeyRef:
+              name: homepage-secrets
+              key: NEXTCLOUD_USER
+        - name: HOMEPAGE_VAR_NEXTCLOUD_PASS
+          valueFrom:
+            secretKeyRef:
+              name: homepage-secrets
+              key: NEXTCLOUD_PASS
+        # Healthchecks.io
+        - name: HOMEPAGE_VAR_HEALTHCHECKS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: homepage-secrets
+              key: HEALTHCHECKS_KEY
+        # Traefik (no auth needed for API if internal)
+        volumeMounts:
+        - name: config
+          mountPath: /app/config/settings.yaml
+          subPath: settings.yaml
+        - name: config
+          mountPath: /app/config/services.yaml
+          subPath: services.yaml
+        - name: config
+          mountPath: /app/config/bookmarks.yaml
+          subPath: bookmarks.yaml
+        - name: config
+          mountPath: /app/config/widgets.yaml
+          subPath: widgets.yaml
+        - name: config
+          mountPath: /app/config/kubernetes.yaml
+          subPath: kubernetes.yaml
+        - name: config
+          mountPath: /app/config/docker.yaml
+          subPath: docker.yaml
+        - name: config
+          mountPath: /app/config/custom.css
+          subPath: custom.css
+        - name: config
+          mountPath: /app/config/custom.js
+          subPath: custom.js
+        - name: logo
+          mountPath: /app/public/icons/logo.png
+          subPath: logo.png
+        - name: data
+          mountPath: /app/config/logs
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "50m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      volumes:
+      - name: config
+        configMap:
+          name: homepage-config
+      - name: logo
+        configMap:
+          name: homepage-logo
+      - name: data
+        persistentVolumeClaim:
+          claimName: homepage-data-longhorn
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: homepage
+  namespace: homepage
+spec:
+  selector:
+    app: homepage
+  ports:
+  - port: 80
+    targetPort: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: homepage-ingress
+  namespace: homepage
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-cloudflare"
+spec:
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - homepage.home.example.home
+    secretName: homepage-tls
+  rules:
+  - host: homepage.home.example.home
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: homepage
+            port:
+              number: 80

@@ -1,0 +1,8 @@
+[Unit]
+Description=k3s SQLite datastore backup and off-node sync
+After=k3s.service
+Requires=k3s.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/k3s-scripts/k3s-db-backup.sh

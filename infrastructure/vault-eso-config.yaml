@@ -1,0 +1,36 @@
+---
+# ServiceAccount for External Secrets to authenticate to Vault
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: external-secrets-vault
+  namespace: external-secrets
+---
+# Long-lived token for the ServiceAccount
+apiVersion: v1
+kind: Secret
+metadata:
+  name: external-secrets-vault-token
+  namespace: external-secrets
+  annotations:
+    kubernetes.io/service-account.name: external-secrets-vault
+type: kubernetes.io/service-account-token
+---
+# ClusterSecretStore - tells ESO how to connect to Vault
+apiVersion: external-secrets.io/v1
+kind: ClusterSecretStore
+metadata:
+  name: vault-backend
+spec:
+  provider:
+    vault:
+      server: "http://vault.vault.svc.cluster.local:8200"
+      path: "secret"
+      version: "v2"
+      auth:
+        kubernetes:
+          mountPath: "kubernetes"
+          role: "external-secrets"
+          serviceAccountRef:
+            name: "external-secrets-vault"
+            namespace: "external-secrets"

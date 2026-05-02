@@ -1,0 +1,25 @@
+---
+# NFS StorageClass for k3s cluster
+# Backend: Server C (10.0.60.9) - Proxmox native ZFS
+# Export: /storage/k3s (must be created on Server C first)
+# Future: Update server to TrueNAS on Server B (10.10.60.10) when deployed
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: nfs-critical
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: nfs.csi.k8s.io
+parameters:
+  server: 10.0.60.9
+  share: /storage/k3s
+  mountPermissions: "0755"
+reclaimPolicy: Retain
+volumeBindingMode: Immediate
+allowVolumeExpansion: true
+mountOptions:
+  - nfsvers=4.2
+  - hard
+  - timeo=600
+  - retrans=2
+  - noresvport

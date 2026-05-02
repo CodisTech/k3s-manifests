@@ -1,0 +1,13 @@
+hostname: rancher.homelab.local
+bootstrapPassword: admin
+ingress:
+  tls:
+    source: rancher
+replicas: 3
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app: rancher

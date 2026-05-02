@@ -1,0 +1,88 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: jellyseerr
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jellyseerr-config-longhorn
+  namespace: jellyseerr
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jellyseerr
+  namespace: jellyseerr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jellyseerr
+  template:
+    metadata:
+      labels:
+        app: jellyseerr
+    spec:
+      containers:
+      - name: jellyseerr
+        image: fallenbagel/jellyseerr:latest
+        ports:
+        - containerPort: 5055
+        env:
+        - name: TZ
+          value: "America/New_York"
+        - name: LOG_LEVEL
+          value: "info"
+        volumeMounts:
+        - name: config
+          mountPath: /app/config
+      volumes:
+      - name: config
+        persistentVolumeClaim:
+          claimName: jellyseerr-config-longhorn
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jellyseerr
+  namespace: jellyseerr
+spec:
+  selector:
+    app: jellyseerr
+  ports:
+  - port: 80
+    targetPort: 5055
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: jellyseerr-ingress
+  namespace: jellyseerr
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-cloudflare"
+spec:
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - jellyseerr.home.example.home
+    secretName: jellyseerr-tls
+  rules:
+  - host: jellyseerr.home.example.home
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: jellyseerr
+            port:
+              number: 80

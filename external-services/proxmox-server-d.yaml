@@ -1,0 +1,58 @@
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: proxmox-d-tls
+  namespace: external-services
+spec:
+  secretName: proxmox-d-tls
+  issuerRef:
+    name: letsencrypt-cloudflare
+    kind: ClusterIssuer
+  dnsNames:
+  - proxmox-d.home.example.home
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: proxmox-server-d
+  namespace: external-services
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8006
+    protocol: TCP
+    targetPort: 8006
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: proxmox-server-d
+  namespace: external-services
+subsets:
+- addresses:
+  - ip: 10.0.60.8
+  ports:
+  - port: 8006
+    protocol: TCP
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: proxmox-server-d
+  namespace: external-services
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-cloudflare
+spec:
+  entryPoints:
+  - websecure
+  routes:
+  - kind: Rule
+    match: Host(`proxmox-d.home.example.home`)
+    services:
+    - name: proxmox-server-d
+      port: 8006
+      scheme: https
+      serversTransport: proxmox-transport
+  tls:
+    secretName: proxmox-d-tls
